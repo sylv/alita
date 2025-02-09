@@ -1,0 +1,27 @@
+[package]
+name = "alita"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.95"
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1.42", features = ["full"] }
+tracing-subscriber = "0.3.19"
+tracing = "0.1.41"
+axum = { version = "0.8.1", features = ["macros"] }
+dotenv = "0.15.0"
+headless_chrome = { version = "1.0.15" }
+reqwest = { version = "0.12.12", features = ["gzip", "zstd"] }
+scraper = "0.22.0"
+axum-extra = { version = "0.10.0", features = ["query"] }
+base64 = "0.22.1"
+lazy_static = "1.5.0"
+tower-http = { version = "0.6.2", features = [
+    "compression-gzip",
+    "compression-zstd",
+] }
+deadpool = { version = "0.12.1", default-features = false, features = [
+    "managed",
+] }
