@@ -43,7 +43,7 @@ const response = await post("http://127.0.0.1:4000", {
     // if a requested page contains any of these elements, the page is loaded into chromium
     // to let JavaScript bypass the block page.
     // if it does not, the page is returned as is.
-    is_blocked_elements: [
+    is_block_element: [
         '.block-page',
         '.captcha'
     ],
