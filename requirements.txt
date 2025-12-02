@@ -1,0 +1,5 @@
+fastapi>=0.123.2
+httpx>=0.28.1
+parsel>=1.10.0
+uvicorn[standard]>=0.38.0
+zendriver>=0.15.2

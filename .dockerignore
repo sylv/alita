@@ -1,0 +1,8 @@
+*
+!src
+!docker
+!requirements.txt
+!uv.lock
+!pyproject.toml
+!.python-version
+!README.md
