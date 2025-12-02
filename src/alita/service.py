@@ -54,15 +54,8 @@ def headers_from_mapping(headers: Mapping[str, str]) -> list[tuple[str, str]]:
     return [(name, value) for name, value in headers.items()]
 
 
-def aggregate_headers(headers: list[tuple[str, str]]) -> dict[str, str | list[str]]:
-    grouped: dict[str, list[str]] = {}
-    for name, value in headers:
-        lowered = name.lower()
-        grouped.setdefault(lowered, []).append(value)
-    normalized: dict[str, str | list[str]] = {}
-    for name, values in grouped.items():
-        normalized[name] = values[0] if len(values) == 1 else values
-    return normalized
+def aggregate_headers(headers: list[tuple[str, str]]) -> list[dict[str, str]]:
+    return [{"name": name.lower(), "value": value} for name, value in headers]
 
 
 def sanitize_headers(headers: Mapping[str, str]) -> dict[str, str]:

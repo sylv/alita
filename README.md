@@ -65,7 +65,10 @@ const response = await post("http://127.0.0.1:4000/get", {
 // {
 //     status_code: 200,
 //     used_browser: false,
-//     headers: {"content-type": "text/html; charset=utf-8", ...},
+//     headers: [
+//         {name: "content-type", value: "text/html; charset=utf-8"},
+//         ...
+//     ],
 //     body: "<!doctype html>..."
 // }
 ```
