@@ -55,7 +55,7 @@ const response = await post("http://127.0.0.1:4000/get", {
         ".block-page",
         ".captcha"
     ],
-    // wait for this selector before assuming the block page is bypassed (required)
+    // optionally wait for this selector before treating the page as ready
     wait_for_element: ".post-data",
     // maximum seconds to wait for the selector when the browser is used (optional)
     wait_timeout: 10,
@@ -71,4 +71,8 @@ const response = await post("http://127.0.0.1:4000/get", {
 //     ],
 //     body: "<!doctype html>..."
 // }
+
+// Cloudflare-style challenge pages are detected automatically; the browser keeps
+// polling until the challenge markup disappears, then waits for the optional
+// selector (if provided) followed by the configured document ready-state.
 ```

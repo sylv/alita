@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 class FetchRequest(BaseModel):
     url: HttpUrl
-    wait_for_element: str = Field(min_length=1)
+    wait_for_element: str | None = Field(default=None, min_length=1)
     browser_on_elements: list[str] = Field(default_factory=list)
     wait_timeout: float = Field(default=10.0, gt=0, le=120)
 
@@ -33,8 +33,11 @@ class FetchRequest(BaseModel):
 
     @field_validator("wait_for_element")
     @classmethod
-    def _strip_wait(cls, value: str) -> str:
-        return value.strip()
+    def _strip_wait(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
 
 
 @dataclass(slots=True)

@@ -28,7 +28,7 @@ from .models import (
     PlainSnapshot,
     SessionState,
 )
-from .selectors import evaluate_plain_html
+from .selectors import evaluate_plain_html, detect_cloudflare_challenge_from_html
 
 HOP_BY_HOP_HEADERS = {
     "host",
@@ -44,6 +44,8 @@ HOP_BY_HOP_HEADERS = {
 }
 
 logger = logging.getLogger(__name__)
+
+CLOUDFLARE_POLL_SECONDS = 0.1
 
 
 def headers_from_httpx(headers: httpx.Headers) -> list[tuple[str, str]]:
@@ -74,9 +76,62 @@ def extract_user_agent(headers: Mapping[str, str]) -> str | None:
     return None
 
 
-async def await_rendered_html(tab: Tab, selector: str, payload: FetchRequest, settings: Settings) -> str:
+async def wait_for_cloudflare_clearance(tab: Tab, url: str, timeout: float) -> None:
+    if timeout <= 0:
+        return
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    detected_marker: str | None = None
+    while True:
+        html = await tab.get_content()
+        marker = detect_cloudflare_challenge_from_html(html)
+        if marker is None:
+            if detected_marker:
+                logger.debug(
+                    "Cloudflare challenge cleared on %s after detection via '%s'",
+                    url,
+                    detected_marker,
+                )
+            return
+        if detected_marker is None:
+            logger.info(
+                "Detected Cloudflare challenge on %s via '%s'; waiting up to %.1fs",
+                url,
+                marker,
+                timeout,
+            )
+        detected_marker = marker
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            logger.warning("Timed out waiting for Cloudflare challenge on %s", url)
+            raise HTTPException(status_code=504, detail="Timed out waiting for Cloudflare challenge")
+        await asyncio.sleep(min(CLOUDFLARE_POLL_SECONDS, remaining))
+
+
+async def await_rendered_html(tab: Tab, payload: FetchRequest, settings: Settings) -> str:
     ready_timeout = max(payload.wait_timeout, settings.ready_state_timeout)
     target_url = str(payload.url)
+    await wait_for_cloudflare_clearance(tab, target_url, payload.wait_timeout)
+    if payload.wait_for_element:
+        logger.debug(
+            "Waiting for selector '%s' on %s (timeout %.1fs)",
+            payload.wait_for_element,
+            target_url,
+            payload.wait_timeout,
+        )
+        try:
+            await asyncio.wait_for(
+                tab.wait_for(selector=payload.wait_for_element, timeout=payload.wait_timeout),
+                timeout=payload.wait_timeout,
+            )
+        except asyncio.TimeoutError as exc:
+            logger.warning(
+                "Timed out waiting for selector '%s' on %s after %.1fs",
+                payload.wait_for_element,
+                target_url,
+                payload.wait_timeout,
+            )
+            raise HTTPException(status_code=504, detail="Timed out waiting for wait_for_element") from exc
     logger.debug(
         "Waiting for ready state '%s' on %s (timeout %.1fs)",
         settings.ready_state_target,
@@ -97,20 +152,6 @@ async def await_rendered_html(tab: Tab, selector: str, payload: FetchRequest, se
         )
         raise HTTPException(status_code=504, detail="Timed out waiting for ready state") from exc
     logger.debug("Ready state '%s' satisfied on %s", settings.ready_state_target, target_url)
-    logger.debug("Waiting for selector '%s' on %s (timeout %.1fs)", selector, target_url, payload.wait_timeout)
-    try:
-        await asyncio.wait_for(
-            tab.wait_for(selector=selector, timeout=payload.wait_timeout),
-            timeout=payload.wait_timeout,
-        )
-    except asyncio.TimeoutError as exc:
-        logger.warning(
-            "Timed out waiting for selector '%s' on %s after %.1fs",
-            selector,
-            target_url,
-            payload.wait_timeout,
-        )
-        raise HTTPException(status_code=504, detail="Timed out waiting for wait_for_element") from exc
     html = await tab.get_content()
     logger.debug("Rendered HTML ready for %s (length=%d)", target_url, len(html))
     return html
@@ -241,7 +282,7 @@ async def browser_flow(
             logger.debug("Hydrated snapshot for %s with status %s", url, snapshot.status_code)
 
         try:
-            html = await await_rendered_html(tab, payload.wait_for_element, payload, settings)
+            html = await await_rendered_html(tab, payload, settings)
         except Exception:
             if page_ready:
                 page_ready.set()
@@ -312,11 +353,11 @@ async def plain_flow(
     merged_cookies = merge_cookies(state.cookies, cookie_updates)
     filtered_cookies = filter_cookie_states(merged_cookies, url)
 
-    wait_present, blocking_selector = evaluate_plain_html(
+    wait_present, blocking_selector, cloudflare_marker = evaluate_plain_html(
         response.text, payload.wait_for_element, payload.browser_on_elements
     )
     fallback = False
-    if not wait_present:
+    if payload.wait_for_element and not wait_present:
         logger.info(
             "Falling back to browser for %s because wait selector '%s' was not present",
             domain,
@@ -328,6 +369,13 @@ async def plain_flow(
             "Falling back to browser for %s because blocking selector '%s' matched",
             domain,
             blocking_selector,
+        )
+        fallback = True
+    if cloudflare_marker:
+        logger.info(
+            "Falling back to browser for %s because Cloudflare marker '%s' was detected",
+            domain,
+            cloudflare_marker,
         )
         fallback = True
     if fallback:
